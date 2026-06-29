@@ -4050,21 +4050,17 @@ def analyze_symbol(tok: str, symbol: str, now: datetime) -> Dict[str, Any]:
             smc_context = analyze_smc_lite(symbol_up, selected_mode, price)
             if strategy_result:
                 strategy_result = apply_smc_to_strategy(strategy_result, smc_context)
-            _ys = smc_context.get("yahoo_status") or {}
-            _ys_state = _ys.get("state", "UNKNOWN")
-            _ys_ok = _ys.get("ok")
-            _ys_age = _ys.get("last_success_age_seconds")
-            _ys_txt = f"Yahoo={'OK' if _ys_ok else 'FAILED'}:{_ys_state}" if _ys_ok is not None else "Yahoo=UNKNOWN"
-            if isinstance(_ys_age, (int, float)):
-                _ys_txt += f" age={_ys_age:.0f}s"
+            _smc_src = smc_context.get("source", "dxlink")
+            _smc_dx_ok = smc_context.get("dxlink_candles_ok", bool(smc_context.get("available")))
             print(
                 f"[smc_mtf] {symbol_up} | mode={selected_mode} | "
                 f"bias={smc_context.get('bias')} | "
                 f"structure={smc_context.get('last_structure')} | "
                 f"zone={smc_context.get('zone')} | "
                 f"sweep={smc_context.get('recent_sweep')} | "
-                f"adj={smc_context.get('smc_score',0)} | {_ys_txt} | "
-                f"source={smc_context.get('source','yahoo')}"
+                f"adj={smc_context.get('smc_score',0)} | "
+                f"dxlink_ok={_smc_dx_ok} | yahoo_used=False | "
+                f"source={_smc_src}"
             )
         except Exception as _smc_err:
             smc_context = {"available": False, "bias": "neutral", "smc_score": 0, "error": str(_smc_err)}
@@ -4110,19 +4106,15 @@ def analyze_symbol(tok: str, symbol: str, now: datetime) -> Dict[str, Any]:
             _ds_ltf = demand_supply_context.get("ltf", {})
             _htf_d = _ds_htf.get("nearest_demand") or {}
             _htf_s = _ds_htf.get("nearest_supply") or {}
-            _dys = demand_supply_context.get("yahoo_status") or {}
-            _dys_state = _dys.get("state", "UNKNOWN")
-            _dys_ok = _dys.get("ok")
-            _dys_age = _dys.get("last_success_age_seconds")
-            _dys_txt = f"Yahoo={'OK' if _dys_ok else 'FAILED'}:{_dys_state}" if _dys_ok is not None else "Yahoo=UNKNOWN"
-            if isinstance(_dys_age, (int, float)):
-                _dys_txt += f" age={_dys_age:.0f}s"
+            _ds_src2 = demand_supply_context.get("source", "dxlink")
+            _ds_dx_ok = demand_supply_context.get("dxlink_candles_ok", "dxlink" in str(_ds_src2))
             print(
                 f"[order_block] {symbol_up} | mode={selected_mode} | "
                 f"HTF_bullish_OB={_htf_d.get('low')}–{_htf_d.get('high')} status={_htf_d.get('status')} | "
                 f"HTF_bearish_OB={_htf_s.get('low')}–{_htf_s.get('high')} status={_htf_s.get('status')} | "
-                f"adj={demand_supply_context.get('score',0)} | {_dys_txt} | "
-                f"source={demand_supply_context.get('source','yahoo')}"
+                f"adj={demand_supply_context.get('score',0)} | "
+                f"dxlink_ok={_ds_dx_ok} | yahoo_used=False | "
+                f"source={_ds_src2}"
             )
             # ── RC15j Phase 2A — D/S DXLink Diagnostic Audit ─────────────────
             # يملأ حقول journal بتفاصيل DXLink لـ SPX و غيره — لا block هنا

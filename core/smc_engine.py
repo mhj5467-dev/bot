@@ -260,23 +260,37 @@ def _recent_sweep(candles: List[Dict[str, float]], highs: List[Dict[str, Any]], 
 
 
 def _load_candles_for_tf(symbol: str, period: str, interval: str) -> List[Dict[str, float]]:
-    """Load candles. Supports synthetic 4h via 1h Yahoo data."""
-    if interval in ("4h", "4H"):
-        # Yahoo does not reliably support 4h directly. Build it from 1h.
-        return _resample_candles(fetch_yahoo_ohlc(symbol, period, "1h"), 4 * 60 * 60)
-    return fetch_yahoo_ohlc(symbol, period, interval)
+    """Load candles from DXLink only. No Yahoo fallback."""
+    iv = str(interval or "").lower()
+    # 4H = resample from 1H DXLink candles
+    if iv in ("4h", "4H"):
+        candles_1h = _load_dxlink_candles(symbol, "1h", days_back=120)
+        return _resample_candles(candles_1h, 4 * 60 * 60)
+    # map period → days_back
+    days_map = {"1d": 45, "15m": 12, "5m": 5, "1h": 45, "4h": 120}
+    days_back = days_map.get(iv, 30)
+    return _load_dxlink_candles(symbol, iv, days_back=days_back)
+
+
+def _load_dxlink_candles(symbol: str, interval: str, days_back: int) -> List[Dict[str, float]]:
+    """Fetch candles from DXLink. Returns [] silently if unavailable — no Yahoo fallback."""
+    try:
+        from core.analyzer import _get_access_token
+        from core.dxlink_client import fetch_dxlink_candles_snapshot
+        tok = _get_access_token()
+        raw = fetch_dxlink_candles_snapshot(tok, symbol, period=interval, days_back=days_back, timeout_seconds=6.0)
+        return [c for c in [
+            {k: c.get(k) for k in ("time", "open", "high", "low", "close")}
+            for c in (raw or [])
+        ] if all(c.get(k) is not None for k in ("open", "high", "low", "close"))]
+    except Exception:
+        return []
 
 
 def _analyze_single_tf(symbol: str, period: str, interval: str, pivot_len: int,
                        pd_lookback: int, sweep_lookback: int, label: str) -> Dict[str, Any]:
     candles = _load_candles_for_tf(symbol, period, interval)
     if not candles or len(candles) < pivot_len * 2 + 10:
-        ys = get_yahoo_ohlc_status()
-        reason = "insufficient OHLC data"
-        source = "yahoo_empty"
-        if ys.get("ok") is False:
-            reason = f"Yahoo OHLC unavailable: {ys.get('state')}"
-            source = "yahoo_failed"
         return {
             "available": False,
             "label": label,
@@ -285,9 +299,10 @@ def _analyze_single_tf(symbol: str, period: str, interval: str, pivot_len: int,
             "last_structure": "Unavailable",
             "zone": "unknown",
             "recent_sweep": "None",
-            "reason": reason,
-            "source": source,
-            "yahoo_status": ys,
+            "reason": "dxlink_unavailable" if not candles else "insufficient_candles",
+            "source": "dxlink_unavailable",
+            "dxlink_candles_ok": False,
+            "yahoo_used": False,
             "candles": len(candles or []),
         }
     highs, lows = _pivots(candles, pivot_len)
@@ -357,8 +372,9 @@ def analyze_smc_lite(symbol: str, mode: str = "0DTE", price: Optional[float] = N
             "recent_sweep": "None",
             "smc_score": 0,
             "reason": f"HTF: {htf.get('reason')}; LTF: {ltf.get('reason')}",
-            "source": "yahoo_failed" if (htf.get("source") == "yahoo_failed" or ltf.get("source") == "yahoo_failed") else "neutral_fallback",
-            "yahoo_status": get_yahoo_ohlc_status(),
+            "source": "dxlink_unavailable",
+            "dxlink_candles_ok": False,
+            "yahoo_used": False,
             "htf": htf,
             "ltf": ltf,
         }
@@ -397,8 +413,9 @@ def analyze_smc_lite(symbol: str, mode: str = "0DTE", price: Optional[float] = N
         "htf_weight": htf_weight,
         "ltf_weight": ltf_weight,
         "smc_score": 0,
-        "source": "yahoo",
-        "yahoo_status": get_yahoo_ohlc_status(),
+        "source": "dxlink",
+        "dxlink_candles_ok": True,
+        "yahoo_used": False,
         "htf": htf,
         "ltf": ltf,
     }

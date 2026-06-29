@@ -22,13 +22,13 @@ import math
 from typing import Any, Dict, List, Optional, Tuple
 
 try:
-    # Legacy fallback loader (Yahoo). RC12d prefers DXLink for 0DTE ETF SMC/OB candles.
-    from core.smc_engine import _load_candles_for_tf, _pivots, get_yahoo_ohlc_status
-except Exception:  # pragma: no cover - safe fallback if imported in isolation
+    from core.smc_engine import _load_candles_for_tf, _pivots
+except Exception:  # pragma: no cover
     _load_candles_for_tf = None
     _pivots = None
-    def get_yahoo_ohlc_status():
-        return {"ok": None, "state": "UNKNOWN"}
+
+def get_yahoo_ohlc_status():
+    return {"ok": False, "state": "DISABLED", "yahoo_used": False}
 
 
 def _normalize_dx_candles(candles: List[Dict[str, Any]]) -> List[Dict[str, float]]:
@@ -78,33 +78,22 @@ def _load_orderblock_candles(symbol: str, mode: str, period: str, interval: str)
     sym = str(symbol or "").upper().strip()
     mode_u = str(mode or "0DTE").upper()
     swing_symbols = {"SPY", "QQQ", "IWM", "DIA", "AAPL", "NVDA", "GLD"}
-    use_dxlink = (mode_u == "SWING" and sym in swing_symbols) or (mode_u == "0DTE" and sym in {"SPY", "QQQ", "IWM", "SPX"})
-    if use_dxlink:
-        iv = interval.lower()
-        if iv in ("4h", "240m"):
-            days_back = 120
-        elif iv in ("1h", "60m"):
-            days_back = 45
-        elif iv in ("15m",):
-            days_back = 12
-        else:
-            days_back = 5
-        candles, status = _load_dxlink_candles_for_tf(sym, interval, days_back)
-        if candles:
-            return candles, "dxlink", status
-        # Preserve a Yahoo fallback, but keep the DXLink failure diagnostics.
-        if _load_candles_for_tf:
-            fallback = _load_candles_for_tf(symbol, period, interval) or []
-            y_status = get_yahoo_ohlc_status()
-            if fallback:
-                y_status = dict(y_status or {})
-                y_status["fallback_from"] = status
-                return fallback, "yahoo_fallback_after_dxlink", y_status
-        return [], "dxlink", status
-    if not _load_candles_for_tf:
-        return [], "missing_loader", {"ok": False, "state": "OHLC loader unavailable"}
-    candles = _load_candles_for_tf(symbol, period, interval)
-    return candles or [], "yahoo", get_yahoo_ohlc_status()
+    # جميع الرموز تستخدم DXLink فقط — لا Yahoo fallback
+    iv = interval.lower()
+    if iv in ("4h", "240m"):
+        days_back = 120
+    elif iv in ("1h", "60m"):
+        days_back = 45
+    elif iv in ("15m",):
+        days_back = 12
+    else:
+        days_back = 5
+    candles, status = _load_dxlink_candles_for_tf(sym, interval, days_back)
+    if candles:
+        return candles, "dxlink", {**status, "yahoo_used": False, "dxlink_candles_ok": True}
+    return [], "dxlink_unavailable", {"ok": False, "state": "dxlink_unavailable",
+                                      "yahoo_used": False, "dxlink_candles_ok": False,
+                                      "diagnostics_only": True}
 
 
 MAX_OB_SCORE_ADJUSTMENT = 15
