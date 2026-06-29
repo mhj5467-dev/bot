@@ -1,0 +1,29 @@
+# بيانات حساسة — لا ترفعها أبداً
+config/.env
+*.env
+
+# بيانات التشغيل
+data/bot.log
+data/*.csv
+data/*.jsonl
+data/*.db
+data/*.sqlite
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+
+# Windows
+*.bat
+*.spec
+*.exe
+
+# بيانات احتياطية
+*.bak
+*.pre_rc15i9d.bak
