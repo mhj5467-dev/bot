@@ -73,7 +73,7 @@ def _load_orderblock_candles(symbol: str, mode: str, period: str, interval: str)
     Candle source policy:
       - Swing symbols SPY/QQQ/IWM/DIA/AAPL/NVDA/GLD: DXLink for 1H/15m/5m/4H.
       - 0DTE ETF diagnostics SPY/QQQ/IWM: DXLink.
-      - Other profiles/symbols: legacy Yahoo fallback.
+      - Other profiles/symbols: DXLink only — no Yahoo fallback.
     """
     sym = str(symbol or "").upper().strip()
     mode_u = str(mode or "0DTE").upper()
@@ -459,7 +459,6 @@ def analyze_demand_supply(symbol: str, mode: str = "0DTE", price: Optional[float
     for label, period, interval, pivot_len in (htf_spec, ltf_spec):
         candles, candle_source, candle_status = _load_orderblock_candles(symbol, mode, period, interval)
         if not candles or len(candles) < pivot_len * 2 + 10:
-            ys = get_yahoo_ohlc_status()
             reason = "insufficient OHLC data"
             source = f"{candle_source}_empty"
             if candle_status.get("ok") is False:
@@ -472,7 +471,8 @@ def analyze_demand_supply(symbol: str, mode: str = "0DTE", price: Optional[float
                 "reason": reason,
                 "source": source,
                 "candle_status": candle_status,
-                "yahoo_status": ys,
+                "dxlink_candles_ok": False,
+                "yahoo_used": False,
                 "candles": len(candles or []),
                 "demand": [],
                 "supply": [],
@@ -515,18 +515,19 @@ def analyze_demand_supply(symbol: str, mode: str = "0DTE", price: Optional[float
     srcs = {contexts.get("htf", {}).get("source"), contexts.get("ltf", {}).get("source")}
     if "dxlink" in srcs:
         top_source = "dxlink"
-    elif available:
-        top_source = "yahoo"
     elif any(str(x or "").endswith("_failed") for x in srcs):
-        top_source = ",".join(sorted(str(x) for x in srcs if x))
+        top_source = "dxlink_unavailable"
+    elif available:
+        top_source = "dxlink"
     else:
-        top_source = "neutral_fallback"
+        top_source = "dxlink_unavailable"
     return {
         "available": available,
         "profile": profile_name,
         "source": top_source,
-        "candle_source_policy": "DXLink for SPY/QQQ/IWM 0DTE; Yahoo fallback otherwise",
-        "yahoo_status": get_yahoo_ohlc_status(),
+        "candle_source_policy": "DXLink only — no Yahoo fallback; dxlink_unavailable if data missing",
+        "dxlink_candles_ok": available,
+        "yahoo_used": False,
         "engine": "BOS/CHoCH Order Block Scoring",
         "price": px,
         "score": 0,
@@ -1380,7 +1381,7 @@ def detect_swing_demand_supply_zones(
     }
 
     try:
-        # Swing Demand/Supply uses DXLink for all supported Swing symbols, with Yahoo fallback.
+        # Swing Demand/Supply uses DXLink for all supported Swing symbols — no Yahoo fallback.
         candles, candle_source, candle_status = _load_orderblock_candles(sym, "SWING", f"{days}d", interval)
         min_required = structure_size + 15
         if not candles or len(candles) < min_required:

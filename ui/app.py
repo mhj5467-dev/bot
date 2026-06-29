@@ -609,7 +609,7 @@ class SPXBotApp:
                 return
             bg = bg or CARD
             available = smc.get("available", False)
-            if not available and not smc.get("error") and not smc.get("yahoo_status"):
+            if not available and not smc.get("error") and not smc.get("dxlink_status") and not smc.get("yahoo_status"):
                 return
             bias = smc.get("bias", "neutral")
             zone = smc.get("zone", "—")
@@ -623,22 +623,18 @@ class SPXBotApp:
             ltf_struct = smc.get("ltf_last_structure", "—")
             color = ACCENT if bias == "bullish" else (RED if bias == "bearish" else (GOLD if bias == "mixed" else TEXT_DIM))
             adj_txt = f"{adj:+}" if isinstance(adj, (int, float)) else str(adj)
-            ys = smc.get("yahoo_status") or {}
-            ys_ok = ys.get("ok")
-            ys_state = ys.get("state", "UNKNOWN")
-            ys_age = ys.get("last_success_age_seconds")
-            ys_txt = f"Yahoo={'OK' if ys_ok else 'FAILED'}:{ys_state}" if ys_ok is not None else "Yahoo=UNKNOWN"
-            if isinstance(ys_age, (int, float)):
-                ys_txt += f" age={ys_age:.0f}s"
+            dx_ok = smc.get("dxlink_candles_ok")
+            dx_txt = f"DXLink={'OK' if dx_ok else 'UNAVAILABLE'}" if dx_ok is not None else "DXLink=UNKNOWN"
+            dx_txt += " | yahoo_used=False"
             txt = (
                 f"SMC MTF: {bias.upper()} | HTF({htf_tf})={htf_bias}/{htf_struct} "
-                f"| LTF({ltf_tf})={ltf_bias}/{ltf_struct} | Zone={zone} | Sweep={sweep} | Adj={adj_txt} | {ys_txt}"
+                f"| LTF({ltf_tf})={ltf_bias}/{ltf_struct} | Zone={zone} | Sweep={sweep} | Adj={adj_txt} | {dx_txt}"
             )
             if not available and smc.get("error"):
-                txt = f"SMC: unavailable — {smc.get('error')} | {ys_txt}"
+                txt = f"SMC: unavailable — {smc.get('error')} | {dx_txt}"
                 color = GOLD
-            elif not available and smc.get("yahoo_status"):
-                txt = f"SMC: neutral fallback — {smc.get('reason','OHLC unavailable')} | {ys_txt}"
+            elif not available and (smc.get("yahoo_status") or smc.get("dxlink_status")):
+                txt = f"SMC: neutral fallback — {smc.get('reason','OHLC unavailable')} | {dx_txt}"
                 color = GOLD
             tk.Label(parent, text=txt, bg=bg, fg=color,
                      font=("Consolas", 7, "bold"), wraplength=620,
@@ -654,7 +650,7 @@ class SPXBotApp:
                 return
             bg = bg or CARD
             available = ds.get("available", False)
-            if not available and not ds.get("error") and not ds.get("yahoo_status"):
+            if not available and not ds.get("error") and not ds.get("dxlink_status") and not ds.get("yahoo_status"):
                 return
             adj = ds.get("score", 0)
             direction = ds.get("direction", "neutral")
@@ -676,22 +672,18 @@ class SPXBotApp:
 
             color = ACCENT if adj > 0 else (RED if adj < 0 else TEXT_DIM)
             adj_txt = f"{adj:+}" if isinstance(adj, (int, float)) else str(adj)
-            ys = ds.get("yahoo_status") or {}
-            ys_ok = ys.get("ok")
-            ys_state = ys.get("state", "UNKNOWN")
-            ys_age = ys.get("last_success_age_seconds")
-            ys_txt = f"Yahoo={'OK' if ys_ok else 'FAILED'}:{ys_state}" if ys_ok is not None else "Yahoo=UNKNOWN"
-            if isinstance(ys_age, (int, float)):
-                ys_txt += f" age={ys_age:.0f}s"
+            dx_ok = ds.get("dxlink_candles_ok")
+            dx_txt = f"DXLink={'OK' if dx_ok else 'UNAVAILABLE'}" if dx_ok is not None else "DXLink=UNKNOWN"
+            dx_txt += " | yahoo_used=False"
             txt = (
                 f"OrderBlock: dir={direction} | HTF({htf_tf}) Bull={fmt_zone(hd)} Bear={fmt_zone(hs)} "
-                f"| LTF({ltf_tf}) Bull={fmt_zone(ld)} Bear={fmt_zone(ls)} | Adj={adj_txt} | {ys_txt}"
+                f"| LTF({ltf_tf}) Bull={fmt_zone(ld)} Bear={fmt_zone(ls)} | Adj={adj_txt} | {dx_txt}"
             )
             if not available and ds.get("error"):
-                txt = f"OrderBlock: unavailable — {ds.get('error')} | {ys_txt}"
+                txt = f"OrderBlock: unavailable — {ds.get('error')} | {dx_txt}"
                 color = GOLD
-            elif not available and ds.get("yahoo_status"):
-                txt = f"OrderBlock: neutral fallback — {ds.get('reason','OHLC unavailable')} | {ys_txt}"
+            elif not available and (ds.get("yahoo_status") or ds.get("dxlink_status")):
+                txt = f"OrderBlock: neutral fallback — {ds.get('reason','OHLC unavailable')} | {dx_txt}"
                 color = GOLD
             tk.Label(parent, text=txt, bg=bg, fg=color,
                      font=("Consolas", 7, "bold"), wraplength=620,
